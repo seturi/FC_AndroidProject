@@ -5,37 +5,55 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.AsyncTask
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
-import android.widget.TextView
 import androidx.core.content.FileProvider
+import com.google.api.client.extensions.android.http.AndroidHttp
+import com.google.api.client.json.gson.GsonFactory
+import com.google.api.services.vision.v1.Vision
+import com.google.api.services.vision.v1.VisionRequest
+import com.google.api.services.vision.v1.VisionRequestInitializer
+import com.google.api.services.vision.v1.model.*
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.main_analyze_view.*
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.lang.StringBuilder
+import java.lang.ref.WeakReference
+import java.util.*
+import kotlin.collections.ArrayList
 
 class MainActivity : AppCompatActivity() {
 
     private val CAMERA_PERMISSION_REQUEST = 1000
     private val GALLERY_PERMISSION_REQUEST = 1001
     private val FILE_NAME = "picture.jpg"
-    private val uploadChooser : UploadChooser? = null
+    private var uploadChooser : UploadChooser? = null
+    private var labelDetectionTask : LabelDetectionTask? = null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        labelDetectionTask = LabelDetectionTask(
+            packageName = packageName,
+            packageManager = packageManager,
+            activity = this
+        )
         setupListener()
     }
 
     private fun setupListener(){
         upload_image.setOnClickListener{
-            UploadChooser().apply {
+            uploadChooser = UploadChooser().apply {
                 addNotifier(object : UploadChooser.UploadChooserNotifierInterface{
                     override fun cameraOnClick() {
-                        Log.d("upload", "cameraOnClick")
+                        Log.d("upload", "CameraOnClick")
                         checkCameraPermission()
                     }
 
@@ -92,17 +110,30 @@ class MainActivity : AppCompatActivity() {
         when(requestCode){
             CAMERA_PERMISSION_REQUEST -> {
                 if(resultCode != Activity.RESULT_OK) return
-                val photoUri = FileProvider.getUriForFile(this, applicationContext.packageName + ".provider", createCameraFile())
+                val photoUri = FileProvider.getUriForFile(
+                    this,
+                    applicationContext.packageName + ".provider",
+                    createCameraFile()
+                )
                 uploadImage(photoUri)
             }
-            GALLERY_PERMISSION_REQUEST -> data?.let { it.data }
-
+            GALLERY_PERMISSION_REQUEST -> data?.let { uploadImage(it.data) }
         }
     }
-    private fun uploadImage(imageUri: Uri){
+    private fun uploadImage(imageUri: Uri?){
         val bitmap : Bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
         uploaded_image.setImageBitmap(bitmap)
         uploadChooser?.dismiss()
+        requestCloudVisionApi(bitmap)
+    }
+
+    private fun requestCloudVisionApi(bitmap: Bitmap){
+        labelDetectionTask?.requestCloudVisionApi(bitmap, object: LabelDetectionTask
+        .LabelDetectionNotifierInterface{
+            override fun notifyResult(result: String) {
+                uploaded_image_result.text = result
+            }
+        })
     }
 
     private fun createCameraFile(): File {
