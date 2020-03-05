@@ -3,7 +3,6 @@ package com.fastcampus.vision.api
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.AsyncTask
-import android.util.Log
 import com.google.api.client.extensions.android.http.AndroidHttp
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.vision.v1.Vision
@@ -27,6 +26,7 @@ class LabelDetectionTask (
     private val ANDROID_CERT_HEADER = "X-Android_Cert"
     private val MAX_RESULTS = 10
     private var labelDetectionNotifierInterface: LabelDetectionNotifierInterface? = null
+    private var requestType : String? = null
 
     interface LabelDetectionNotifierInterface{
         fun notifyResult(result:String)
@@ -34,8 +34,10 @@ class LabelDetectionTask (
 
     fun requestCloudVisionApi(
         bitmap: Bitmap,
-        labelDetectionNotifierInterface: LabelDetectionNotifierInterface
+        labelDetectionNotifierInterface: LabelDetectionNotifierInterface,
+        requestType: String
     ) {
+        this.requestType = requestType
         this.labelDetectionNotifierInterface = labelDetectionNotifierInterface
         val visionTask = ImageRequestTask(prepareImageRequest(bitmap))
         visionTask.execute()
@@ -53,7 +55,7 @@ class LabelDetectionTask (
         override fun doInBackground(vararg params: Any?): String {
             try {
                 val response = request.execute()
-                return convertResponseToString(response)
+                return findProperResponseType(response)
             } catch (e: Exception) {
             }
             return "분석 실패"
@@ -100,6 +102,14 @@ class LabelDetectionTask (
                 annotateImageRequest.features = object  : ArrayList<Feature>() {
                     init {
                         val labelDetection = Feature()
+                        when(requestType) {
+                            activity.LABEL_DETECTION_REQUEST-> {
+                                labelDetection.type = "LABEL_DETECTION"
+                            }
+                            activity.LANDMARK_DETECTION_REQUEST->{
+                                labelDetection.type = "LANDMARK_DETECTION"
+                            }
+                        }
                         labelDetection.type = "LABEL_DETECTION"
                         labelDetection.maxResults = MAX_RESULTS
                         add(labelDetection)
@@ -113,16 +123,25 @@ class LabelDetectionTask (
         return annotateRequest
     }
 
-    private fun convertResponseToString(response: BatchAnnotateImagesResponse): String {
-        val message = StringBuilder("분석 결과\n")
-        val labels = response.responses[0].labelAnnotations
-        labels?.let {
-            it.forEach {
-                message.append(String.format(Locale.US, "%.3f: %s", it.score, it.description))
-                message.append("\n")
+    private fun findProperResponseType(response: BatchAnnotateImagesResponse): String {
+        when(requestType) {
+            activity.LABEL_DETECTION_REQUEST-> {
+                return convertResponseToString(response.responses[0].labelAnnotations)
             }
-            return message.toString()
+            activity.LANDMARK_DETECTION_REQUEST->{
+                return convertResponseToString(response.responses[0].landmarkAnnotations)
+            }
         }
+
         return "분석 실패"
+    }
+
+    private fun convertResponseToString(labels: List<EntityAnnotation>): String {
+        val message = StringBuilder("분석 결과\n")
+        labels.forEach {
+            message.append(String.format(Locale.US, "%.3f: %s", it.score, it.description))
+            message.append("\n")
+        }
+        return message.toString()
     }
 }

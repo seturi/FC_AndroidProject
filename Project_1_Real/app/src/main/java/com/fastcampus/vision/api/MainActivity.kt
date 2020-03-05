@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import android.widget.ImageView
 import androidx.core.content.FileProvider
 import com.google.api.client.extensions.android.http.AndroidHttp
 import com.google.api.client.json.gson.GsonFactory
@@ -34,6 +35,9 @@ class MainActivity : AppCompatActivity() {
     private val FILE_NAME = "picture.jpg"
     private var uploadChooser : UploadChooser? = null
     private var labelDetectionTask : LabelDetectionTask? = null
+
+    val LABEL_DETECTION_REQUEST = "label_detection_request"
+    val LANDMARK_DETECTION_REQUEST = "landmark_detection_request"
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,16 +128,31 @@ class MainActivity : AppCompatActivity() {
         val bitmap : Bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
         uploaded_image.setImageBitmap(bitmap)
         uploadChooser?.dismiss()
-        requestCloudVisionApi(bitmap)
+
+        DetectionChooser().apply {
+            addDetectionChooserNotifierInterface(object : DetectionChooser
+            .DetectionChooserNotifierInterface {
+                override fun detectLabel() {
+                    findViewById<ImageView>(R.id.uploaded_image).setImageBitmap(bitmap)
+                    requestCloudVisionApi(bitmap, LABEL_DETECTION_REQUEST)
+                }
+
+                override fun detectLandmark() {
+                    findViewById<ImageView>(R.id.uploaded_image).setImageBitmap(bitmap)
+                    requestCloudVisionApi(bitmap, LANDMARK_DETECTION_REQUEST)
+                }
+            })
+        }.show(supportFragmentManager, "")
+
     }
 
-    private fun requestCloudVisionApi(bitmap: Bitmap){
+    private fun requestCloudVisionApi(bitmap: Bitmap, requestType: String){
         labelDetectionTask?.requestCloudVisionApi(bitmap, object: LabelDetectionTask
         .LabelDetectionNotifierInterface{
             override fun notifyResult(result: String) {
                 uploaded_image_result.text = result
             }
-        })
+        }, requestType)
     }
 
     private fun createCameraFile(): File {
