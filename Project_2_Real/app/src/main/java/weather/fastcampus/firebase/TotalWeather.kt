@@ -5,6 +5,7 @@ import java.io.Serializable
 
 class TotalWeather(
     var main: Main? = null,
+    @SerializedName("weather")
     var weatherList: ArrayList<Weather>? = null
 ): Serializable
 
